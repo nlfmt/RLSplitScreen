@@ -218,6 +218,7 @@ namespace RLSplitScreen {
 			this->MinimumSize = System::Drawing::Size(250, 250);
 			this->Name = L"MainForm";
 			this->Text = L"RLSplitScreen";
+			this->Load += gcnew System::EventHandler(this, &MainForm::MainForm_Load);
 			this->tableLayoutPanel1->ResumeLayout(false);
 			this->titlebar->ResumeLayout(false);
 			this->titlebar->PerformLayout();
@@ -240,5 +241,6 @@ namespace RLSplitScreen {
 	private: System::Void TitleBar_MouseMove(System::Object^ sender, System::Windows::Forms::MouseEventArgs^ e);
 	private: System::Void TitleBar_MouseUp(System::Object^ sender, System::Windows::Forms::MouseEventArgs^ e);
 	private: System::Void button1_Click(System::Object^ sender, System::EventArgs^ e);
+	private: System::Void MainForm_Load(System::Object^ sender, System::EventArgs^ e);
 };
 }

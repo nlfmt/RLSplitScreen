@@ -7,65 +7,21 @@
 #include <filesystem>
 
 #include "common.h"
+#include "monitor.h"
+#include "storage.h"
 #include "MainForm.h"
 
 
 namespace fs = std::filesystem;
 
 
-void quit()
+std::string operator+ (int i, std::string s)
 {
-	System::Windows::Forms::Application::Exit();
+	return std::to_string(i) + s;
 }
-
-
-std::string getDocumentsFolder(RLSplitScreen::MainForm^ app)
+std::string operator+ (std::string s, int i)
 {
-	CHAR my_documents[MAX_PATH];
-	HRESULT result = SHGetFolderPathA(NULL, CSIDL_PERSONAL, NULL, SHGFP_TYPE_CURRENT, my_documents);
-
-	if (result != S_OK) {
-		app->log("Error: Failed to get Documents folder.");
-	}
-	return std::string(my_documents);
-}
-
-
-struct Monitor
-{
-	int width;
-	int height;
-	int top;
-	CHAR name[32];
-};
-
-float aspect_ratio;
-bool compatible = true;
-Monitor monitors[2];
-
-BOOL MonitorEnumProc(HMONITOR hMon, HDC hdc, LPRECT lpRect, LPARAM lParam)
-{
-	MONITORINFO info;
-	info.cbSize = sizeof(MONITORINFO);
-	GetMonitorInfoA(hMon, &info);
-	int width = info.rcMonitor.right - info.rcMonitor.left;
-	int height = info.rcMonitor.bottom - info.rcMonitor.top;
-	float ar = (float)width / (float)height;
-
-	if (!aspect_ratio)
-	{
-		aspect_ratio = ar;
-		monitors[0] = { width, height, info.rcMonitor.top };
-		
-	} else
-	{
-		if (abs(ar - aspect_ratio) > 0.0001) compatible = false;
-
-		monitors[1] = { width, height, info.rcMonitor.top };
-		return FALSE;
-	}
-
-	return TRUE; // Continue enumerating
+	return s + std::to_string(i);
 }
 
 
@@ -74,30 +30,14 @@ void enableSplitScreen(RLSplitScreen::MainForm^ app)
 	// check if user has exactly two monitors
 	app->log("Checking Monitor count...");
 	if (GetSystemMetrics(SM_CMONITORS) != 2)
-	{
-		app->log("Error: You need two monitors to use SplitScreen.");
-		return;
-	}
+		return app->log("Error: You need two monitors to use SplitScreen.");
 
 
-	// get all monitor resolutions and check if they have the same aspect ratio
-	EnumDisplayMonitors(0, 0, MonitorEnumProc, 0);
-	if (!compatible)
-	{
-		app->log("Error: Your monitors do not have the same aspect ratio.");
-		return;
-	}
+	// check if all resolutions have the same aspect ratio
+	if (!isCompatible())
+		return app->log("Error: Your monitors do not have the same aspect ratio.");
 
-
-	// get device names to set their device modes later
-	DISPLAY_DEVICEA dev;
-	ZeroMemory(&dev, sizeof(DISPLAY_DEVICEA));
-	dev.cb = sizeof(DISPLAY_DEVICEA);
-
-	for (int i = 0; EnumDisplayDevicesA(NULL, i, &dev, 0); i++) {
-		if (i == 1) memcpy(monitors[i].name, dev.DeviceName, sizeof(dev.DeviceName));
-	}
-
+	std::vector<Monitor> monitors = getMonitors();
 
 	// try setting the same resolution for both monitors
 	int rlwidth = monitors[0].width * 2, rlheight = monitors[0].height;
@@ -122,19 +62,20 @@ void enableSplitScreen(RLSplitScreen::MainForm^ app)
 				if (devmode.dmPelsWidth == desired_width && devmode.dmPelsHeight == desired_height) {
 					if (m == 1)
 					{
-						devmode.dmPosition.y = 0; // monitors[2 - m - 1].top;
+						devmode.dmPosition.y = 0;
 						devmode.dmPosition.x = monitors[m].width;
 						devmode.dmFields |= DM_POSITION;
 					}
 					int err = ChangeDisplaySettingsExA(monitors[m].name, &devmode, NULL, 0, NULL);
 
-					if (err) app->log(std::string("Error: Couldn't set display mode.") + std::to_string(err));
+					if (err) app->log(std::string("Error: Couldn't set display mode.") + err);
 					else
 					{
 						success = true;
+						saveMonitors(monitors);
 
-						std::string msg = "Set Resolution to " + std::to_string(desired_width) + "x" + std::to_string(desired_height);
-						app->log(msg.c_str());
+						std::string msg = std::string("Set Resolution to ") + desired_width + "x" + desired_height;
+						app->log(msg);
 
 						rlwidth = desired_width * 2;
 						rlheight = desired_height;
@@ -145,15 +86,11 @@ void enableSplitScreen(RLSplitScreen::MainForm^ app)
 			if (success) break;
 		}
 
-		if (!success)
-		{
-			app->log("Error: Couldn't find a suitable display mode.\nTry to make your displays the same resolution.");
-			return;
-		}
+		if (!success) return app->log("Error: Couldn't find a suitable display mode.\nTry to make your displays the same resolution.");
 	}
 
 
-	const std::string configFileName = getDocumentsFolder(app) + "\\My Games\\Rocket League\\TAGame\\Config\\TASystemSettings.ini";
+	const std::string configFileName = getDocumentsFolder() + "\\My Games\\Rocket League\\TAGame\\Config\\TASystemSettings.ini";
 	const std::string configFileBackupName = configFileName + ".backup";
 
 	app->log("Backing up config file...");
@@ -173,10 +110,8 @@ void enableSplitScreen(RLSplitScreen::MainForm^ app)
 	std::ifstream backupFile;
 	backupFile.open(configFileBackupName);
 
-	if (!configFile.is_open() || !backupFile.is_open()) {
-		app->log("Error: Failed to open config/backup file.");
-		return;
-	}
+	if (!configFile.is_open() || !backupFile.is_open())
+		return app->log("Error: Failed to open config/backup file.");
 
 	std::string line;
 	while (std::getline(backupFile, line))
@@ -200,37 +135,50 @@ void enableSplitScreen(RLSplitScreen::MainForm^ app)
 	}
 	backupFile.close();
 	configFile.close();
+
 	app->log("-------------------------------------------------------------------");
 	app->log("Success!\r\nYou can now restart Rocket League.");
+	app->log("-------------------------------------------------------------------");
 }
 
 void disableSplitScreen(RLSplitScreen::MainForm^ app)
 {
 	app->log("Restoring display resolutions...");
 
-	EnumDisplayMonitors(0, 0, MonitorEnumProc, 0);
+	std::vector<Monitor> monitors = getMonitors();
+	std::vector<Monitor> storedMonitors = getStoredMonitors();
+
 	for (int i=0; i < 2; i++)
 	{
 		DEVMODEA devmode;
+		ZeroMemory(&devmode, sizeof(DEVMODEA));
 		devmode.dmSize = sizeof(DEVMODEA);
+		devmode.dmDriverExtra = 0;
 
-		bool res = EnumDisplaySettingsA(monitors[i].name, 1, &devmode);
-		/*for (int m = 1; res; m++)
-			res = EnumDisplaySettingsA(monitors[i].name, m, &devmode);*/
-
-		if (!res)
+		bool res = EnumDisplaySettingsExA(monitors[i].name, ENUM_CURRENT_SETTINGS, &devmode, 0);
+		if (devmode.dmPelsWidth != storedMonitors[i].width || devmode.dmPelsHeight != storedMonitors[i].height)
 		{
-			app->log("Warning: No display mode found for monitor " + std::to_string(i+1) + ".");
-			continue;
+			for (int m = 0; res = EnumDisplaySettingsExA(monitors[i].name, m, &devmode, 0); m++)
+			{
+				if (devmode.dmPelsWidth == storedMonitors[i].width && devmode.dmPelsHeight == storedMonitors[i].height)
+				{
+					app->log(std::string("Switched Monitor ") + (i+1) + " back to " + devmode.dmPelsWidth + "x" + devmode.dmPelsHeight);
+					int err = ChangeDisplaySettingsExA(monitors[i].name,  &devmode, NULL, 0, NULL);
+					if (err) app->log("Warning: Couldn't restore display mode for monitor " + std::to_string(i+1) + ".");
+					break;
+				}
+			}
+			if (!res)
+			{
+				app->log("Warning: No display mode found for monitor " + std::to_string(i+1) + ".");
+				continue;
+			}
 		}
-
-		int err = ChangeDisplaySettingsExA(monitors[i].name,  &devmode, NULL, 0, NULL);
-		if (err) app->log("Warning: Couldn't restore display mode for monitor " + std::to_string(i+1) + ".");
 	}
 
 	app->log("Reverting to backed up config file...");
 
-	const std::string configFileName = getDocumentsFolder(app) + "\\My Games\\Rocket League\\TAGame\\Config\\TASystemSettings.ini";
+	const std::string configFileName = getDocumentsFolder() + "\\My Games\\Rocket League\\TAGame\\Config\\TASystemSettings.ini";
 	const std::string configFileBackupName = configFileName + ".backup";
 
 	if (!fs::exists(fs::path(configFileBackupName)))
@@ -247,5 +195,7 @@ void disableSplitScreen(RLSplitScreen::MainForm^ app)
 
 	DeleteFileA(configFileBackupName.c_str());
 
+	app->log("-------------------------------------------------------------------");
 	app->log("Done!");
+	app->log("-------------------------------------------------------------------");
 }

@@ -1,4 +1,5 @@
 #include "common.h"
+#include "storage.h"
 #include "MainForm.h"
 
 namespace RLSplitScreen
@@ -47,5 +48,10 @@ namespace RLSplitScreen
 	System::Void MainForm::button1_Click(System::Object^ sender, System::EventArgs^ e)
 	{
 		quit();
+	}
+
+	System::Void MainForm::MainForm_Load(System::Object^ sender, System::EventArgs^ e)
+	{
+		loadMonitors();
 	}
 }
