@@ -6,12 +6,12 @@ namespace RLSplitScreen
 {
 	void MainForm::log(const char* msg) {
 		String^ str = gcnew String(msg);
-		this->logs->AppendText(str + "\r\n");
+		this->logs->AppendText(" " + str + "\r\n");
 	}
 
 	void MainForm::log(std::string msg) {
 		String^ str = gcnew String(msg.c_str());
-		this->logs->AppendText(str + "\r\n");
+		this->logs->AppendText(" " + str + "\r\n");
 	}
 
 	System::Void MainForm::btn_enable_Click(System::Object^ sender, System::EventArgs^ e) {
@@ -53,5 +53,10 @@ namespace RLSplitScreen
 	System::Void MainForm::MainForm_Load(System::Object^ sender, System::EventArgs^ e)
 	{
 		loadMonitors();
+	}
+
+	bool MainForm::resSetEnabled()
+	{
+		return this->checkBox1->Checked;
 	}
 }

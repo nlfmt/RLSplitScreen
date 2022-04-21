@@ -42,7 +42,7 @@ void enableSplitScreen(RLSplitScreen::MainForm^ app)
 	// try setting the same resolution for both monitors
 	int rlwidth = monitors[0].width * 2, rlheight = monitors[0].height;
 
-	if (monitors[0].width != monitors[1].width || monitors[0].height != monitors[1].height)
+	if (app->resSetEnabled() && (monitors[0].width != monitors[1].width || monitors[0].height != monitors[1].height))
 	{
 		app->log("Trying to set the same resolution for both monitors...");
 		bool success = false;
@@ -137,41 +137,44 @@ void enableSplitScreen(RLSplitScreen::MainForm^ app)
 	configFile.close();
 
 	app->log("-------------------------------------------------------------------");
-	app->log("Success!\r\nYou can now restart Rocket League.");
+	app->log("Success!\r\n You can now restart Rocket League.");
 	app->log("-------------------------------------------------------------------");
 }
 
 void disableSplitScreen(RLSplitScreen::MainForm^ app)
 {
-	app->log("Restoring display resolutions...");
+	if (app->resSetEnabled()) {
 
-	std::vector<Monitor> monitors = getMonitors();
-	std::vector<Monitor> storedMonitors = getStoredMonitors();
+		app->log("Restoring display resolutions...");
 
-	for (int i=0; i < 2; i++)
-	{
-		DEVMODEA devmode;
-		ZeroMemory(&devmode, sizeof(DEVMODEA));
-		devmode.dmSize = sizeof(DEVMODEA);
-		devmode.dmDriverExtra = 0;
+		std::vector<Monitor> monitors = getMonitors();
+		std::vector<Monitor> storedMonitors = getStoredMonitors();
 
-		bool res = EnumDisplaySettingsExA(monitors[i].name, ENUM_CURRENT_SETTINGS, &devmode, 0);
-		if (devmode.dmPelsWidth != storedMonitors[i].width || devmode.dmPelsHeight != storedMonitors[i].height)
+		for (int i = 0; i < 2; i++)
 		{
-			for (int m = 0; res = EnumDisplaySettingsExA(monitors[i].name, m, &devmode, 0); m++)
+			DEVMODEA devmode;
+			ZeroMemory(&devmode, sizeof(DEVMODEA));
+			devmode.dmSize = sizeof(DEVMODEA);
+			devmode.dmDriverExtra = 0;
+
+			bool res = EnumDisplaySettingsExA(monitors[i].name, ENUM_CURRENT_SETTINGS, &devmode, 0);
+			if (devmode.dmPelsWidth != storedMonitors[i].width || devmode.dmPelsHeight != storedMonitors[i].height)
 			{
-				if (devmode.dmPelsWidth == storedMonitors[i].width && devmode.dmPelsHeight == storedMonitors[i].height)
+				for (int m = 0; res = EnumDisplaySettingsExA(monitors[i].name, m, &devmode, 0); m++)
 				{
-					app->log(std::string("Switched Monitor ") + (i+1) + " back to " + devmode.dmPelsWidth + "x" + devmode.dmPelsHeight);
-					int err = ChangeDisplaySettingsExA(monitors[i].name,  &devmode, NULL, 0, NULL);
-					if (err) app->log("Warning: Couldn't restore display mode for monitor " + std::to_string(i+1) + ".");
-					break;
+					if (devmode.dmPelsWidth == storedMonitors[i].width && devmode.dmPelsHeight == storedMonitors[i].height)
+					{
+						app->log(std::string("Switched Monitor ") + (i + 1) + " back to " + devmode.dmPelsWidth + "x" + devmode.dmPelsHeight);
+						int err = ChangeDisplaySettingsExA(monitors[i].name, &devmode, NULL, 0, NULL);
+						if (err) app->log("Warning: Couldn't restore display mode for monitor " + std::to_string(i + 1) + ".");
+						break;
+					}
 				}
-			}
-			if (!res)
-			{
-				app->log("Warning: No display mode found for monitor " + std::to_string(i+1) + ".");
-				continue;
+				if (!res)
+				{
+					app->log("Warning: No display mode found for monitor " + std::to_string(i + 1) + ".");
+					continue;
+				}
 			}
 		}
 	}
